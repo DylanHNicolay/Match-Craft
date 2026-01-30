@@ -54,7 +54,7 @@ class Queue(commands.Cog):
 
     #Add a person to the waiting list
     @app_commands.command()
-    async def addPerson(self, interaction: discord.Interaction, user: discord.User):
+    async def addperson(self, interaction: discord.Interaction, user: discord.User):
         if(self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
