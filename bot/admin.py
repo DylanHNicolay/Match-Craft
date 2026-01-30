@@ -39,7 +39,6 @@ class Admin(commands.Cog):
             if existing_role:
                 await interaction.response.send_message(f"Role {role.mention} is already an admin role.")
                 return
-            await interaction.response.send_message(f"Role {role.mention} has been added as an admin role.")
             await db.execute("INSERT INTO administrative_roles (role_id) VALUES ($1);", role.id)
             await db.close()
             await interaction.response.send_message(f"Role {role.mention} has been added as an admin role.")
