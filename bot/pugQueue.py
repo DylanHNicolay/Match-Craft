@@ -284,21 +284,24 @@ class MyActionRow(ui.ActionRow):
         self.queue=queue
     
     #Adds player to the queue when the press the add button
-    @ui.button(label='Add', style=discord.ButtonStyle.green)
+    @ui.button(label='Join', style=discord.ButtonStyle.green)
     async def add(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot add player to non-queue channel"
         if channel.id in self.queue.queueDict.keys():
-            self.queue.queueDict[channel.id]["player_queue"].append(name)
-            if len(self.queue.queueDict[channel.id]["player_queue"])<self.queue.queueDict[channel.id]["max_players"]:
-                output=name + " joined the queue\n" + self.queue.queueMessage(channel)
+            if name not in self.queue.queueDict[channel.id]["player_queue"]:
+                self.queue.queueDict[channel.id]["player_queue"].append(name)
+                if len(self.queue.queueDict[channel.id]["player_queue"])<self.queue.queueDict[channel.id]["max_players"]:
+                    output=name + " joined the queue\n" + self.queue.queueMessage(channel)
+                else:
+                    self.queue.__startMatch()
             else:
-                self.queue.__startMatch()
+                    output="you are already in the queue\n" + self.queue.queueMessage(channel)
         await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue))
 
     #Removes the player from the queue when they press the remove button
-    @ui.button(label='Remove',style=discord.ButtonStyle.red)
+    @ui.button(label='Leave',style=discord.ButtonStyle.red)
     async def remove(self, interaction: discord.Interaction, button: discord.ui.Button):
         channel=interaction.channel
         name=interaction.user.name
