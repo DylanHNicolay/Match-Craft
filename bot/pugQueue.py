@@ -54,7 +54,7 @@ class Queue(commands.Cog):
 
     #Add a person to the waiting list
     @app_commands.command()
-    async def addperson(self, interaction: discord.Interaction, user: discord.User):
+    async def add(self, interaction: discord.Interaction, user: discord.User):
         if(self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
@@ -68,6 +68,23 @@ class Queue(commands.Cog):
                         self.__startMatch()
                 else:
                     output="that person is already in the queue\n" + self.queueMessage(channel)
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+
+    #Remove a person from the waiting list
+    @app_commands.command()
+    async def remove(self, interaction: discord.Interaction, user: discord.User):
+        if(self.__verifyAdmin(interaction.user)):
+            channel=interaction.channel
+            name=user.name
+            output="cannot remove player from non-queue channel"
+            if channel.id in self.queueDict.keys():
+                if(name in self.queueDict[channel.id]["player_queue"]):
+                    self.queueDict[channel.id]["player_queue"].remove(name)
+                    output=name + " left the queue\n" + self.queueMessage(channel)
+                else: 
+                    output="that person is not in this queue"
             await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
         else:
             await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
@@ -222,7 +239,7 @@ class Queue(commands.Cog):
      
     #adds the player to the queue 
     @app_commands.command()
-    async def add(self, interaction: discord.Interaction):
+    async def join(self, interaction: discord.Interaction):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot add player to non-queue channel"
@@ -239,7 +256,7 @@ class Queue(commands.Cog):
 
     #removes the player from the queue
     @app_commands.command()
-    async def remove(self, interaction: discord.Interaction):
+    async def leave(self, interaction: discord.Interaction):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot remove player from non-queue channel"
