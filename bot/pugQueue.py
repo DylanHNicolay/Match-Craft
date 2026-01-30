@@ -51,6 +51,26 @@ class Queue(commands.Cog):
             if role in self.adminWhitelistRole or role.permissions.administrator:
                 return True
         return False
+
+    #Add a person to the waiting list
+    @app_commands.command()
+    async def addPerson(self, interaction: discord.Interaction, user: discord.User):
+        if(self.__verifyAdmin(interaction.user)):
+            channel=interaction.channel
+            name=user.name
+            output="cannot add player to non-queue channel"
+            if channel.id in self.queueDict.keys():
+                if name not in self.queueDict[channel.id]["player_queue"]:
+                    self.queueDict[channel.id]["player_queue"].append(name)
+                    if len(self.queueDict[channel.id]["player_queue"])<self.queueDict[channel.id]["max_players"]:
+                        output=name + " joined the queue\n" + self.queueMessage(channel)
+                    else:
+                        self.__startMatch()
+                else:
+                    output="that person is already in the queue\n" + self.queueMessage(channel)
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
     
     #Add the specified role to the pug admin whitelist
     @app_commands.command()
