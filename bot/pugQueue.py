@@ -47,8 +47,6 @@ class Queue(commands.Cog):
     
     #check if the specified user is whitelisted or has discord admin perms
     def __verifyAdmin(self, user):
-        if (user.id == user.guild.ownerid):
-            return True
         for role in user.roles:
             if role in self.adminWhitelistRole:
                 return True
@@ -94,7 +92,7 @@ class Queue(commands.Cog):
     #Add the specified role to the pug admin whitelist
     @app_commands.command()
     async def addadminrole(self, interaction: discord.Interaction, role: discord.Role):
-        if(self.__verifyAdmin(interaction.user)):
+        if(interaction.user.id == interaction.guild.owner_id):
             outMessage=role.name + " already has pug admin perms"
             if role not in self.adminWhitelistRole:
                 self.adminWhitelistRole.append(role)
@@ -112,7 +110,7 @@ class Queue(commands.Cog):
     #Remove the specified role from the pug admin whitelist
     @app_commands.command()
     async def removeadminrole(self, interaction: discord.Interaction, role: discord.Role):
-        if(self.__verifyAdmin(interaction.user)):
+        if(interaction.user.id == interaction.guild.owner_id):
             outMessage=role.name + " does not have pug admin perms"
             if role in self.adminWhitelistRole:
                 self.adminWhitelistRole.remove(role)
