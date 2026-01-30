@@ -47,6 +47,8 @@ class Queue(commands.Cog):
     
     #check if the specified user is whitelisted or has discord admin perms
     def __verifyAdmin(self, user):
+        if (user.id == user.guild.ownerid):
+            return True
         for role in user.roles:
             if role in self.adminWhitelistRole:
                 return True
