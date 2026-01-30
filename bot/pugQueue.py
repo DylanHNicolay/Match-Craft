@@ -47,16 +47,26 @@ class Queue(commands.Cog):
     #####ADMIN_COMMANDS################################################################################
     
     #check if the specified user is whitelisted or has discord admin perms
-    def __verifyAdmin(self, user):
-        for role in user.roles:
-            if role in self.adminWhitelistRole:
-                return True
-        return False
+    async def __verifyAdmin(self, user):
+        try:
+            await db.connect()
+            admin_roles_records = await db.execute("SELECT role_id FROM administrative_roles")
+            await db.close()
+            if not admin_roles_records:
+                return False
 
+            admin_role_ids = {record['role_id'] for record in admin_roles_records}
+            member_role_ids = {role.id for role in user.roles}
+
+            return not admin_role_ids.isdisjoint(member_role_ids)
+        except Exception as e:
+            print(f"An error occurred in is_admin check: {e}")
+            return False
+    
     #Add a person to the waiting list
     @app_commands.command()
     async def add(self, interaction: discord.Interaction, user: discord.User):
-        if(self.__verifyAdmin(interaction.user)):
+        if(await self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
             output="cannot add player to non-queue channel"
@@ -76,7 +86,7 @@ class Queue(commands.Cog):
     #Remove a person from the waiting list
     @app_commands.command()
     async def remove(self, interaction: discord.Interaction, user: discord.User):
-        if(self.__verifyAdmin(interaction.user)):
+        if(await self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
             output="cannot remove player from non-queue channel"
@@ -94,7 +104,7 @@ class Queue(commands.Cog):
     @app_commands.command()
     @app_commands.describe(game='The game the queue is for', maxplayers='The number of players needed for a match')
     async def startqueue(self, interaction: discord.Interaction, game: str, maxplayers: int):
-        if(self.__verifyAdmin(interaction.user)):
+        if(await self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
             if channel.id not in self.queueDict.keys():
                 #try:    
@@ -124,7 +134,7 @@ class Queue(commands.Cog):
     #Stops the queue in the current channel if one exists
     @app_commands.command()
     async def stopqueue(self, interaction: discord.Interaction):
-        if(self.__verifyAdmin(interaction.user)):
+        if(await self.__verifyAdmin(interaction.user)):
             channel=interaction.channel
         #try:
             mes = await channel.fetch_message(self.queueDict[channel.id]["queue_message_id"])

@@ -11,7 +11,9 @@ class Admin(commands.Cog):
     async def is_admin(self, member: discord.Member) -> bool:
         """Check if a member has an admin role."""
         try:
+            await db.connect()
             admin_roles_records = await db.execute("SELECT role_id FROM administrative_roles")
+            await db.close()
             if not admin_roles_records:
                 return False
 
