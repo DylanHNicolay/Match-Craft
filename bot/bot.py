@@ -12,7 +12,7 @@ from utils.db import db
 load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD_ID=os.getenv('DISCORD_GUILD_ID')
+GUILD_ID = os.getenv('DISCORD_GUILD_ID')
 
 # Define the intents your bot needs
 intents = discord.Intents.default()
