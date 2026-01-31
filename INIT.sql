@@ -2,6 +2,20 @@ CREATE TABLE administrative_roles (
     role_id BIGINT PRIMARY KEY
 );
 
+CREATE TABLE game_configuration (
+    game_name VARCHAR(50) PRIMARY KEY,
+    players_per_team INT,
+    team_count INT,
+    role_count INT
+);
+
+CREATE TABLE role_information (
+    game_name VARCHAR(50) PRIMARY KEY,
+    role_name VARCHAR(50),
+    FOREIGN KEY (game_name) REFERENCES game_configuration(game_name) ON DELETE CASCADE
+);
+
+
 CREATE TABLE active_queues (
     queue_id BIGINT PRIMARY KEY,
     game VARCHAR(50),
