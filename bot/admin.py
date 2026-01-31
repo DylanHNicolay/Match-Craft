@@ -2,68 +2,74 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.db import db
-from utils.embedView import EmbedView
+from utils.Helpers import EmbedView
 
 class Admin(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.adminWhitelistRole=[]
 
-    async def is_admin(self, member: discord.Member) -> bool:
-        """Check if a member has an admin role."""
-        try:
-            await db.connect()
-            admin_roles_records = await db.execute("SELECT role_id FROM administrative_roles")
-            await db.close()
-            if not admin_roles_records:
-                return False
+    #async database setup
+    #populate admin whitelist and queue dictionary with values from the database
+    async def cog_load(self):
+        await db.connect()
+        adminRoles = await db.execute("SELECT role_id FROM administrative_roles;")
+        await db.close()
+        for role in adminRoles:
+            self.adminWhitelistRole.append(role['role_id']) 
 
-            admin_role_ids = {record['role_id'] for record in admin_roles_records}
-            member_role_ids = {role.id for role in member.roles}
+    def verifyAdmin(self, user: discord.User):
+        for role in user.roles:
+            if role.id in self.adminWhitelistRole:
+                return True
+        return False
 
-            return not admin_role_ids.isdisjoint(member_role_ids)
-        except Exception as e:
-            print(f"An error occurred in is_admin check: {e}")
-            return False
-
-    admin = app_commands.Group(name="admin", description="Admin commands")
-
-    @admin.command(name="define", description="Define an admin role.")
-    async def define(self, interaction: discord.Interaction, role: discord.Role):
-        """Define an admin role."""
-        if interaction.user.id != interaction.guild.owner_id:
-            await interaction.response.send_message("Only the server owner can use this command.", ephemeral=True)
-            return
-        
-        try:
-            # Check if the role already exists
-            await db.connect()
-            existing_role = await db.execute("SELECT * FROM administrative_roles WHERE role_id = $1", role.id)
-            if existing_role:
-                await interaction.response.send_message(f"Role {role.mention} is already an admin role.")
-                return
-            await db.execute("INSERT INTO administrative_roles (role_id) VALUES ($1);", role.id)
-            await db.close()
-            await interaction.response.send_message(f"Role {role.mention} has been added as an admin role.")
-        except Exception as e:
-            await interaction.response.send_message(f"An error occurred: {e}")
-
-    #Remove the specified role from the pug admin whitelist
-    @app_commands.command()
-    async def removeadminrole(self, interaction: discord.Interaction, role: discord.Role):
-        if(interaction.user.id == interaction.guild.owner_id):
-            outMessage=role.name + " no longer has pug admin perms"
-            try:
-                await db.connect()
-                await db.execute("DELETE FROM administrative_roles WHERE role_id = $1;",role.id)
-                await db.close()
-            except: 
-                await interaction.response.send_message(view=EmbedView(myText="error removing {id} from the database".format(id=role.id)))
-            await interaction.response.send_message(view=EmbedView(myText=outMessage))
+    #Add the specified role to the pug admin whitelist
+    @app_commands.command(name="addadminrole",description="OWNER ONLY: Adds a role into the list of Admin Roles")
+    async def addadminrole(self, interaction: discord.Interaction, role: discord.Role):
+        if interaction.user.id == interaction.guild.owner_id:
+            outMessage=role.name + " already has pug admin perms"
+            if role.id not in self.adminWhitelistRole:
+                self.adminWhitelistRole.append(role.id)
+                outMessage=role.name + " now has pug admin perms"
+                try:
+                    await db.connect()
+                    await db.execute("INSERT INTO administrative_roles (role_id) VALUES ($1);",role.id)
+                    await db.close()
+                except: 
+                    await interaction.response.send_message(view=EmbedView(myText="error adding {id} to the database".format(id=role.id)),ephemeral=True)
+            await interaction.response.send_message(view=EmbedView(myText=outMessage),ephemeral=True)
         else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for the owner"),ephemeral=True)
+            
+    #Remove the specified role from the pug admin whitelist
+    @app_commands.command(name="removeadminrole",description="OWNER ONLY: Removes a role from the list of Admin Roles")
+    async def removeadminrole(self, interaction: discord.Interaction, role: discord.Role):
+        if interaction.user.id == interaction.guild.owner_id:
+            outMessage=role.name + " does not have pug admin perms"
+            if role.id in self.adminWhitelistRole:
+                self.adminWhitelistRole.remove(role.id)
+                outMessage=role.name + " no longer has pug admin perms"
+                try:
+                    await db.connect()
+                    await db.execute("DELETE FROM administrative_roles WHERE role_id = $1;",role.id)
+                    await db.close()
+                except: 
+                    await interaction.response.send_message(view=EmbedView(myText="error removing {id} from the database".format(id=role.id)),ephemeral=True)
+            await interaction.response.send_message(view=EmbedView(myText=outMessage),ephemeral=True)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for the owner"),ephemeral=True)
 
     #display a message containing all the whitelisted roles for pug administration
-    # TODO: Remake getAdminList logic here
+    @app_commands.command(name="getadminlist",description="ADMINS ONLY: Displays all current Admin roles")
+    async def getadminlist(self,interaction: discord.Interaction):
+        if(self.verifyAdmin(interaction.user)):
+            outMessageDatabase="The following roles have admin perms in the database:\n"
+            for x in self.adminWhitelistRole:
+                outMessageDatabase += (interaction.guild.get_role(x).name + "\n")
+            await interaction.response.send_message(view=EmbedView(myText=outMessageDatabase),ephemeral=True)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"),ephemeral=True)
         
 
 async def setup(bot: commands.Bot):
