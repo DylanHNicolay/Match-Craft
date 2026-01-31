@@ -1,9 +1,9 @@
-from typing import Optional
 import discord
-from discord.ui.item import Item
 from utils.db import db
-from discord import app_commands,ui
+from discord import app_commands
 from discord.ext import commands
+from utils.Helpers import EmbedView, EmbedPugView, verifyAdmin
+
 
 class Queue(commands.Cog):
     def __init__(self,bot) -> None:
@@ -33,58 +33,14 @@ class Queue(commands.Cog):
             self.queueDict[channel.id]["queue_message_id"]=initMessage.id
 
     #####ADMIN_COMMANDS################################################################################
-    
-    #check if the specified user is whitelisted or has discord admin perms
-    def __verifyAdmin(self, user):
-        for role in user.roles:
-            if role.id in self.adminWhitelistRole:
-                return True
-        return False
 
-    #Add a person to the waiting list
-    @app_commands.command(name="add",description="ADMIN ONLY: Adds the specified User (not already in queue) to the current queue")
-    async def add(self, interaction: discord.Interaction, user: discord.User):
-        if(self.__verifyAdmin(interaction.user)):
-            channel=interaction.channel
-            name=user.name
-            output="cannot add player to non-queue channel"
-            if channel.id in self.queueDict.keys():
-                if name not in self.queueDict[channel.id]["player_queue"]:
-                    self.queueDict[channel.id]["player_queue"].append(name)
-                    if len(self.queueDict[channel.id]["player_queue"])<self.queueDict[channel.id]["max_players"]:
-                        output=name + " joined the queue\n" + self.queueMessage(channel)
-                    else:
-                        self.__startMatch()
-                else:
-                    output="that person is already in the queue\n" + self.queueMessage(channel)
-            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
-        else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
-
-    #Remove a person from the waiting list
-    @app_commands.command(name="remove",description="ADMIN ONLY: Removes the specified User (in the queue) from the current queue")
-    async def remove(self, interaction: discord.Interaction, user: discord.User):
-        if(self.__verifyAdmin(interaction.user)):
-            channel=interaction.channel
-            name=user.name
-            output="cannot remove player from non-queue channel"
-            if channel.id in self.queueDict.keys():
-                if(name in self.queueDict[channel.id]["player_queue"]):
-                    self.queueDict[channel.id]["player_queue"].remove(name)
-                    output=name + " left the queue\n" + self.queueMessage(channel)
-                else: 
-                    output="that person is not in this queue"
-            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
-        else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
-    
     #Add the specified role to the pug admin whitelist
     @app_commands.command(name="addadminrole",description="OWNER ONLY: Adds a role into the list of Admin Roles")
     async def addadminrole(self, interaction: discord.Interaction, role: discord.Role):
         if(interaction.user.id == interaction.guild.owner_id):
             outMessage=role.name + " already has pug admin perms"
-            if role not in self.adminWhitelistRole:
-                self.adminWhitelistRole.append(role)
+            if role.id not in self.adminWhitelistRole:
+                self.adminWhitelistRole.append(role.id)
                 outMessage=role.name + " now has pug admin perms"
                 try:
                     await db.connect()
@@ -101,8 +57,8 @@ class Queue(commands.Cog):
     async def removeadminrole(self, interaction: discord.Interaction, role: discord.Role):
         if(interaction.user.id == interaction.guild.owner_id):
             outMessage=role.name + " does not have pug admin perms"
-            if role in self.adminWhitelistRole:
-                self.adminWhitelistRole.remove(role)
+            if role.id in self.adminWhitelistRole:
+                self.adminWhitelistRole.remove(role.id)
                 outMessage=role.name + " no longer has pug admin perms"
                 try:
                     await db.connect()
@@ -117,11 +73,11 @@ class Queue(commands.Cog):
     #display a message containing all the whitelisted roles for pug administration
     @app_commands.command(name="getadminlist",description="ADMINS ONLY: Displays all current Admin roles")
     async def getadminlist(self,interaction: discord.Interaction):
-        if(self.__verifyAdmin(interaction.user)):
-            outMessageDatabase="The following roles have admin perms in the database:"
+        if(verifyAdmin(self,interaction.user)):
+            outMessageDatabase="The following roles have admin perms in the database:\n"
             for x in self.adminWhitelistRole:
-                outMessageDatabase += str(x)
-                await interaction.response.send_message(view=EmbedView(myText=outMessageDatabase))
+                outMessageDatabase += (interaction.guild.get_role(x).name + "\n")
+            await interaction.response.send_message(view=EmbedView(myText=outMessageDatabase))
         else:
             await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
         
@@ -129,7 +85,7 @@ class Queue(commands.Cog):
     @app_commands.command(name="startqueue",description="Starts a queue if one does not exist in the current channel")
     @app_commands.describe(game='The game the queue is for', maxplayers='The number of players needed for a match')
     async def startqueue(self, interaction: discord.Interaction, game: str, maxplayers: int):
-        if(self.__verifyAdmin(interaction.user)):
+        if(verifyAdmin(self,interaction.user)):
             channel=interaction.channel
             if channel.id not in self.queueDict.keys():
                 #try:    
@@ -156,7 +112,7 @@ class Queue(commands.Cog):
     #Stops the queue in the current channel if one exists
     @app_commands.command(name="stopqueue",description="Stops the queue in the current channel if one exists")
     async def stopqueue(self, interaction: discord.Interaction):
-        if(self.__verifyAdmin(interaction.user)):
+        if(verifyAdmin(self,interaction.user)):
             channel=interaction.channel
         #try:
             mes = await channel.fetch_message(self.queueDict[channel.id]["queue_message_id"])
@@ -167,6 +123,44 @@ class Queue(commands.Cog):
             #await interaction.response.send_message(view=EmbedView(myText="error removing queue [{id}] from active_queues".format(id=channel.id)))
         else:
             await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+    
+    #Add a person to the waiting list
+    @app_commands.command(name="add",description="ADMIN ONLY: Adds the specified User (not already in queue) to the current queue")
+    async def add(self, interaction: discord.Interaction, user: discord.User):
+        if(verifyAdmin(self,interaction.user)):
+            channel=interaction.channel
+            name=user.name
+            output="cannot add player to non-queue channel"
+            if channel.id in self.queueDict.keys():
+                if name not in self.queueDict[channel.id]["player_queue"]:
+                    self.queueDict[channel.id]["player_queue"].append(name)
+                    if len(self.queueDict[channel.id]["player_queue"])<self.queueDict[channel.id]["max_players"]:
+                        output=name + " joined the queue\n" + self.queueMessage(channel)
+                    else:
+                        self.__startMatch()
+                else:
+                    output="that person is already in the queue\n" + self.queueMessage(channel)
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+
+    #Remove a person from the waiting list
+    @app_commands.command(name="remove",description="ADMIN ONLY: Removes the specified User (in the queue) from the current queue")
+    async def remove(self, interaction: discord.Interaction, user: discord.User):
+        if(verifyAdmin(self,interaction.user)):
+            channel=interaction.channel
+            name=user.name
+            output="cannot remove player from non-queue channel"
+            if channel.id in self.queueDict.keys():
+                if(name in self.queueDict[channel.id]["player_queue"]):
+                    self.queueDict[channel.id]["player_queue"].remove(name)
+                    output=name + " left the queue\n" + self.queueMessage(channel)
+                else: 
+                    output="that person is not in this queue"
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+    
         
     #########QUEUE_COMMANDS###################    
     
@@ -232,63 +226,6 @@ class Queue(commands.Cog):
         if channel.id in self.queueDict.keys():
             output=self.queueMessage(channel)
         await interaction.response.send_message(view=EmbedView(myText=output))
-
-#button template from discord.py api
-class MyActionRow(ui.ActionRow):
-    def __init__(self, queue: Queue) -> None:
-        super().__init__()
-        self.queue=queue
-    
-    #Adds player to the queue when the press the add button
-    @ui.button(label='Join', style=discord.ButtonStyle.green)
-    async def add(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel=interaction.channel
-        name=interaction.user.name
-        output="cannot add player to non-queue channel"
-        if channel.id in self.queue.queueDict.keys():
-            if name not in self.queue.queueDict[channel.id]["player_queue"]:
-                self.queue.queueDict[channel.id]["player_queue"].append(name)
-                if len(self.queue.queueDict[channel.id]["player_queue"])<self.queue.queueDict[channel.id]["max_players"]:
-                    output=name + " joined the queue\n" + self.queue.queueMessage(channel)
-                else:
-                    self.queue.__startMatch()
-            else:
-                    output="you are already in the queue\n" + self.queue.queueMessage(channel)
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue))
-
-    #Removes the player from the queue when they press the remove button
-    @ui.button(label='Leave',style=discord.ButtonStyle.red)
-    async def remove(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel=interaction.channel
-        name=interaction.user.name
-        output="cannot remove player from non-queue channel"
-        if channel.id in self.queue.queueDict.keys():
-            if(name in self.queue.queueDict[channel.id]["player_queue"]):
-                self.queue.queueDict[channel.id]["player_queue"].remove(name)
-                output=name + " left the queue\n" + self.queue.queueMessage(channel)
-            else: 
-                output="you are not in this queue"
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue))
-
-#standard embed view for sending messages with the bot
-class EmbedView(ui.LayoutView):
-    def __init__(self, *, myText: str) -> None:
-        super().__init__(timeout=None)
-        self.text = ui.TextDisplay(myText)
-        container = ui.Container(self.text, accent_color=discord.Color.red())
-        self.add_item(container)
-
-#embed view that makes use of buttons to add and remove the user from the queue
-class EmbedPugView(ui.LayoutView):
-    def __init__(self, *, myQueueName: str, myText: str, myQueue: Queue) -> None:
-        super().__init__()
-        self.myQueue=myQueue
-        self.queueName = ui.TextDisplay(myQueueName)
-        self.text = ui.TextDisplay(myText)
-        self.sep=ui.Separator(visible=True)
-        self.row=MyActionRow(myQueue)
-        container = ui.Container(self.queueName, self.sep, self.text, self.sep, self.row, accent_color=discord.Color.red())
-        self.add_item(container)
 
 #applies the cog to the bot on startup
 async def setup(bot: commands.Bot)-> None:
