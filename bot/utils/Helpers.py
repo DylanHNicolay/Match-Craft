@@ -39,16 +39,21 @@ class MyActionRow(ui.ActionRow):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot add player to non-queue channel"
+        failure = False
         if channel.id in self.queue.queueDict.keys():
             if name not in self.queue.queueDict[channel.id]["player_queue"]:
                 self.queue.queueDict[channel.id]["player_queue"].append(name)
                 if len(self.queue.queueDict[channel.id]["player_queue"])<self.queue.queueDict[channel.id]["max_players"]:
                     output=name + " joined the queue\n" + self.queue.queueMessage(channel)
                 else:
+                    failure = True
                     self.queue.__startMatch()
             else:
+                    failure = True
                     output="you are already in the queue\n" + self.queue.queueMessage(channel)
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue))
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue),ephemeral=failure)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="That queue is no longer active."),ephemeral=True)
 
     #Removes the player from the queue when they press the remove button
     @ui.button(label='Leave',style=discord.ButtonStyle.red)
@@ -56,17 +61,14 @@ class MyActionRow(ui.ActionRow):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot remove player from non-queue channel"
+        failure = False
         if channel.id in self.queue.queueDict.keys():
             if(name in self.queue.queueDict[channel.id]["player_queue"]):
                 self.queue.queueDict[channel.id]["player_queue"].remove(name)
                 output=name + " left the queue\n" + self.queue.queueMessage(channel)
             else: 
+                failure = True
                 output="you are not in this queue"
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue))
-
-# Simple function to determine if a User has an Admin role
-def verifyAdmin(queue: Queue, user: discord.User):
-    for role in user.roles:
-        if role.id in queue.adminWhitelistRole:
-            return True
-    return False
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queue.queueDict[channel.id]["game"],myText=output,myQueue=self.queue),ephemeral=failure)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="That queue is no longer active."),ephemeral=True)

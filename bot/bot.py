@@ -29,6 +29,7 @@ class MyClient(commands.Bot):
         #await self.add_cog(pugQueue.AdminManagement(self))  
         await self.load_extension("botHelp")
         await self.load_extension("pugQueue")
+        await self.load_extension("admin")
         if GUILD_ID and GUILD_ID.isdigit():
             guild=discord.Object(id=int(GUILD_ID))  
             self.tree.copy_global_to(guild=guild)

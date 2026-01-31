@@ -1,25 +1,14 @@
 import discord
-from utils.db import db
 from discord import app_commands
 from discord.ext import commands
-from utils.Helpers import EmbedView, EmbedPugView, verifyAdmin
+from utils.Helpers import EmbedView, EmbedPugView
 
 
 class Queue(commands.Cog):
     def __init__(self,bot) -> None:
         self.bot=bot
-        self.adminWhitelistRole=[]
         self.queueDict={}
         self.inMatch={}
-
-    #async database setup
-    #populate admin whitelist and queue dictionary with values from the database
-    async def cog_load(self):
-        await db.connect()
-        adminRoles = await db.execute("SELECT role_id FROM administrative_roles;")
-        await db.close()
-        for role in adminRoles:
-            self.adminWhitelistRole.append(role['role_id']) 
 
     #Deletes the original queue message and reposts it any time a user posts in the queue channel so it is always visible     
     @commands.Cog.listener(name='on_message')  
@@ -34,58 +23,16 @@ class Queue(commands.Cog):
 
     #####ADMIN_COMMANDS################################################################################
 
-    #Add the specified role to the pug admin whitelist
-    @app_commands.command(name="addadminrole",description="OWNER ONLY: Adds a role into the list of Admin Roles")
-    async def addadminrole(self, interaction: discord.Interaction, role: discord.Role):
-        if(interaction.user.id == interaction.guild.owner_id):
-            outMessage=role.name + " already has pug admin perms"
-            if role.id not in self.adminWhitelistRole:
-                self.adminWhitelistRole.append(role.id)
-                outMessage=role.name + " now has pug admin perms"
-                try:
-                    await db.connect()
-                    await db.execute("INSERT INTO administrative_roles (role_id) VALUES ($1);",role.id)
-                    await db.close()
-                except: 
-                    await interaction.response.send_message(view=EmbedView(myText="error adding {id} to the database".format(id=role.id)))
-            await interaction.response.send_message(view=EmbedView(myText=outMessage))
-        else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for the owner"))
-            
-    #Remove the specified role from the pug admin whitelist
-    @app_commands.command(name="removeadminrole",description="OWNER ONLY: Removes a role from the list of Admin Roles")
-    async def removeadminrole(self, interaction: discord.Interaction, role: discord.Role):
-        if(interaction.user.id == interaction.guild.owner_id):
-            outMessage=role.name + " does not have pug admin perms"
-            if role.id in self.adminWhitelistRole:
-                self.adminWhitelistRole.remove(role.id)
-                outMessage=role.name + " no longer has pug admin perms"
-                try:
-                    await db.connect()
-                    await db.execute("DELETE FROM administrative_roles WHERE role_id = $1;",role.id)
-                    await db.close()
-                except: 
-                    await interaction.response.send_message(view=EmbedView(myText="error removing {id} from the database".format(id=role.id)))
-            await interaction.response.send_message(view=EmbedView(myText=outMessage))
-        else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for the owner"))
-
-    #display a message containing all the whitelisted roles for pug administration
-    @app_commands.command(name="getadminlist",description="ADMINS ONLY: Displays all current Admin roles")
-    async def getadminlist(self,interaction: discord.Interaction):
-        if(verifyAdmin(self,interaction.user)):
-            outMessageDatabase="The following roles have admin perms in the database:\n"
-            for x in self.adminWhitelistRole:
-                outMessageDatabase += (interaction.guild.get_role(x).name + "\n")
-            await interaction.response.send_message(view=EmbedView(myText=outMessageDatabase))
-        else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+    # Verify Admin for this class: asks "Admin" Cog (which has the whitelist) to perform check
+    # This allows database access to be limited to one Cog
+    def verifyAdmin(self, user: discord.User):
+        return self.bot.get_cog("Admin").verifyAdmin(user)
         
     #Starts a queue if one does not exist in the current channel
-    @app_commands.command(name="startqueue",description="Starts a queue if one does not exist in the current channel")
+    @app_commands.command(name="startqueue",description="ADMIN ONLY: Starts a queue if one does not exist in the current channel")
     @app_commands.describe(game='The game the queue is for', maxplayers='The number of players needed for a match')
     async def startqueue(self, interaction: discord.Interaction, game: str, maxplayers: int):
-        if(verifyAdmin(self,interaction.user)):
+        if(self.verifyAdmin(interaction.user)):
             channel=interaction.channel
             if channel.id not in self.queueDict.keys():
                 #try:    
@@ -105,61 +52,73 @@ class Queue(commands.Cog):
                 #except: 
                     #await interaction.response.send_message(view=EmbedView(myText="error adding new queue [{id}] to active_queues".format(id=channel.id)))
             else:
-                await interaction.response.send_message(view=EmbedView(myText="A queue already exists in this channel"))
+                await interaction.response.send_message(view=EmbedView(myText="A queue already exists in this channel"),ephemeral=True)
         else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"),ephemeral=True)
 
     #Stops the queue in the current channel if one exists
-    @app_commands.command(name="stopqueue",description="Stops the queue in the current channel if one exists")
+    @app_commands.command(name="stopqueue",description="ADMIN ONLY: Stops the queue in the current channel if one exists")
     async def stopqueue(self, interaction: discord.Interaction):
-        if(verifyAdmin(self,interaction.user)):
+        if(self.verifyAdmin(interaction.user)):
             channel=interaction.channel
-        #try:
-            mes = await channel.fetch_message(self.queueDict[channel.id]["queue_message_id"])
-            await mes.edit(delete_after=0.0)
-            del self.queueDict[channel.id]
-            await interaction.response.send_message(view=EmbedView(myText="{name} is no longer a pug channel".format(name=channel.name)))
-        #except: 
-            #await interaction.response.send_message(view=EmbedView(myText="error removing queue [{id}] from active_queues".format(id=channel.id)))
+            if channel.id in self.queueDict.keys():
+                #try:
+                mes = await channel.fetch_message(self.queueDict[channel.id]["queue_message_id"])
+                await mes.edit(delete_after=0.0)
+                del self.queueDict[channel.id]
+                await interaction.response.send_message(view=EmbedView(myText="{name} is no longer a pug channel".format(name=channel.name)))
+                #except: 
+                    #await interaction.response.send_message(view=EmbedView(myText="error removing queue [{id}] from active_queues".format(id=channel.id)))
+            else:
+                await interaction.response.send_message(view=EmbedView(myText="There is no queue in this channel"),ephemeral=True)
         else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"),ephemeral=True)
     
     #Add a person to the waiting list
     @app_commands.command(name="add",description="ADMIN ONLY: Adds the specified User (not already in queue) to the current queue")
     async def add(self, interaction: discord.Interaction, user: discord.User):
-        if(verifyAdmin(self,interaction.user)):
+        if(self.verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
             output="cannot add player to non-queue channel"
+            failure = False
             if channel.id in self.queueDict.keys():
                 if name not in self.queueDict[channel.id]["player_queue"]:
                     self.queueDict[channel.id]["player_queue"].append(name)
                     if len(self.queueDict[channel.id]["player_queue"])<self.queueDict[channel.id]["max_players"]:
                         output=name + " joined the queue\n" + self.queueMessage(channel)
                     else:
+                        failure = True
                         self.__startMatch()
                 else:
+                    failure = True
                     output="that person is already in the queue\n" + self.queueMessage(channel)
-            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+                await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self),ephemeral=failure)
+            else:
+                await interaction.response.send_message(view=EmbedView(myText="There is no queue in this channel"),ephemeral=True)
         else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"),ephemeral=True)
 
     #Remove a person from the waiting list
     @app_commands.command(name="remove",description="ADMIN ONLY: Removes the specified User (in the queue) from the current queue")
     async def remove(self, interaction: discord.Interaction, user: discord.User):
-        if(verifyAdmin(self,interaction.user)):
+        if(self.verifyAdmin(interaction.user)):
             channel=interaction.channel
             name=user.name
             output="cannot remove player from non-queue channel"
+            failure = False
             if channel.id in self.queueDict.keys():
                 if(name in self.queueDict[channel.id]["player_queue"]):
                     self.queueDict[channel.id]["player_queue"].remove(name)
                     output=name + " left the queue\n" + self.queueMessage(channel)
                 else: 
+                    failure = True
                     output="that person is not in this queue"
-            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+                await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self),ephemeral=failure)
+            else:
+                await interaction.response.send_message(view=EmbedView(myText="There is no queue in this channel"),ephemeral=True)
         else:
-            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"))
+            await interaction.response.send_message(view=EmbedView(myText="This command is reserved for administrators"),ephemeral=True)
     
         
     #########QUEUE_COMMANDS###################    
@@ -193,16 +152,21 @@ class Queue(commands.Cog):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot add player to non-queue channel"
+        failure = False
         if channel.id in self.queueDict.keys():
             if name not in self.queueDict[channel.id]["player_queue"]:
                 self.queueDict[channel.id]["player_queue"].append(name)
                 if len(self.queueDict[channel.id]["player_queue"])<self.queueDict[channel.id]["max_players"]:
                     output=name + " joined the queue\n" + self.queueMessage(channel)
                 else:
+                    failure = True
                     self.__startMatch()
             else:
+                failure = True
                 output="you are already in the queue\n" + self.queueMessage(channel)
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self),ephemeral=failure)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="There is no queue in this channel"),ephemeral=True)
 
     #removes the player from the queue
     @app_commands.command(name="leave",description="Leave the queue in the current channel")
@@ -210,13 +174,17 @@ class Queue(commands.Cog):
         channel=interaction.channel
         name=interaction.user.name
         output="cannot remove player from non-queue channel"
+        failure = False
         if channel.id in self.queueDict.keys():
             if(name in self.queueDict[channel.id]["player_queue"]):
                 self.queueDict[channel.id]["player_queue"].remove(name)
                 output=name + " left the queue\n" + self.queueMessage(channel)
             else: 
+                failure = True
                 output="you are not in this queue"
-        await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self))
+            await interaction.response.send_message(view=EmbedPugView(myQueueName=self.queueDict[channel.id]["game"],myText=output,myQueue=self),ephemeral=failure)
+        else:
+            await interaction.response.send_message(view=EmbedView(myText="There is no queue in this channel"),ephemeral=True)
 
     #displays how many players are in the queue
     @app_commands.command(name="queuestatus",description="Displays the number of players currently in the queue")
