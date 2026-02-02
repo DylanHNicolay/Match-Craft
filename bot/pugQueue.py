@@ -9,6 +9,7 @@ class Queue(commands.Cog):
         self.bot=bot
         self.queueDict={}
         self.inMatch={}
+        self.adminCog=self.bot.get_cog("Admin")
 
     #Deletes the original queue message and reposts it any time a user posts in the queue channel so it is always visible     
     @commands.Cog.listener(name='on_message')  
@@ -26,7 +27,7 @@ class Queue(commands.Cog):
     # Verify Admin for this class: asks "Admin" Cog (which has the whitelist) to perform check
     # This allows database access to be limited to one Cog
     def verifyAdmin(self, user: discord.User):
-        return self.bot.get_cog("Admin").verifyAdmin(user)
+        return self.adminCog.verifyAdmin(user)
         
     #Starts a queue if one does not exist in the current channel
     @app_commands.command(name="startqueue",description="ADMIN ONLY: Starts a queue if one does not exist in the current channel")
