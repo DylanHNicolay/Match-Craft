@@ -2,7 +2,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 from utils.db import db
-from utils.Helpers import EmbedView
+from views.helpers import EmbedView
 
 class Admin(commands.Cog):
     def __init__(self, bot: commands.Bot):
