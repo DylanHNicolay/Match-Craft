@@ -1,9 +1,5 @@
 import os
-import sys
 import discord
-import pugQueue
-import admin
-from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 from utils.db import db
@@ -31,8 +27,9 @@ class MyClient(commands.Bot):
         #self.tree.clear_commands(guild=None)
         #await self.add_cog(pugQueue.Queue(self))   
         #await self.add_cog(pugQueue.AdminManagement(self))  
-        await self.load_extension("pugQueue")
+        await self.load_extension("botHelp")
         await self.load_extension("admin")
+        await self.load_extension("pugQueue")
         if GUILD_ID and GUILD_ID.isdigit():
             guild=discord.Object(id=int(GUILD_ID))  
             self.tree.copy_global_to(guild=guild)
