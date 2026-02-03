@@ -78,7 +78,7 @@ class Admin(commands.Cog):
             for user in interaction.guild.members:
                 for role in user.roles:
                     if role.id in self.adminWhitelistRole:
-                        outMessage += (user.display_name + "\n")
+                        outMessage += (user.mention + "\n")
                         break
             await interaction.response.send_message(view=EmbedView(myText=outMessage),ephemeral=True)
         else:
